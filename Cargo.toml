@@ -7,6 +7,7 @@ readme = "README.md"
 license = "MIT"
 homepage = "https://github.com/callrbx/servar"
 repository = "https://github.com/callrbx/servar"
+documentation = "https://github.com/callrbx/servar/blob/main/README.md"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
