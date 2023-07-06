@@ -5,6 +5,7 @@ Servar is eventually designed to be able to replace:
  - netcat
  - socat
  - python's HTTP serve
+ 
 And pretty much any other utility you can or want to hook up to the network.
 Our design goal is modularity and cross compatibility; this tool should work as well on any platform that can compile Rust.
 
