@@ -28,38 +28,24 @@ pub struct Args {
     directory: String,
 }
 
-/// Globalized arguments
-static MODARGS: OnceCell<Args> = OnceCell::new();
-
-impl Args {
-    pub fn global() -> &'static Args {
-        MODARGS.get().expect("Args is not initialized")
-    }
-
-    pub fn get_dir_abs() -> PathBuf {
-        let path = Path::new(Self::global().directory.as_str());
-        path.canonicalize().unwrap()
-    }
-}
+static SERVE_DIR: OnceCell<String> = OnceCell::new();
 
 /// Helper function to convert a path to a relative path
 fn get_dir_rel(path: &PathBuf) -> Option<String> {
-    let rel_path = format!(
-        "/{}",
-        path.strip_prefix(&Args::global().directory)
-            .ok()?
-            .to_str()?
-    );
+    let rel_path = format!("/{}", path.strip_prefix(SERVE_DIR.get()?).ok()?.to_str()?);
     Some(rel_path)
 }
 
 /// The routes used by the program
-pub fn routes() -> BoxedFilter<(impl Reply,)> {
+pub fn routes(serve_dir: String) -> BoxedFilter<(impl Reply,)> {
+    // globalize module arguments for read use in async functions
+    SERVE_DIR.set(serve_dir).unwrap();
+
     let logging = warp::log::custom(|info| {
         println!("Request: '{}',\tStatus: '{}'", info.path(), info.status())
     });
 
-    let handle_files = warp::fs::dir(&Args::global().directory);
+    let handle_files = warp::fs::dir(SERVE_DIR.get().unwrap());
     let handle_directories = warp::get()
         .and(warp::path::full())
         .and_then(dir_to_html)
@@ -70,7 +56,7 @@ pub fn routes() -> BoxedFilter<(impl Reply,)> {
 
 /// Converts the URL route of a folder to an HTML string of the contents
 async fn dir_to_html(route: FullPath) -> Result<String, warp::reject::Rejection> {
-    let path = PathBuf::from(&Args::global().directory).join(&route.as_str()[1..]);
+    let path = PathBuf::from(SERVE_DIR.get().unwrap()).join(&route.as_str()[1..]);
 
     let content = HtmlPage::new()
         .with_title(format!(
@@ -99,7 +85,7 @@ fn items_list(path: &Path, route: &FullPath) -> Option<Container> {
     if route.as_str() != "/" {
         let parent = path
             .parent()
-            .and_then(|path| path.strip_prefix(&Args::global().directory).ok())
+            .and_then(|path| path.strip_prefix(SERVE_DIR.get()?).ok())
             .and_then(Path::to_str)
             .map(|s| format!("{}", s))?;
         links.add_link(parent, "..");
@@ -111,8 +97,8 @@ fn items_list(path: &Path, route: &FullPath) -> Option<Container> {
         .filter_map(format_path)
         .collect();
     entries.sort_by_cached_key(|(name, _)| name.to_string());
-    for (item, net_path) in entries {
-        links.add_link(net_path, item);
+    for (item, item_path) in entries {
+        links.add_link(item_path, item);
     }
 
     Some(links)
@@ -120,14 +106,7 @@ fn items_list(path: &Path, route: &FullPath) -> Option<Container> {
 
 /// Create item name and relative path from given path
 fn format_path(path: PathBuf) -> Option<(String, String)> {
-    let net_path = format!(
-        "/{}",
-        path.strip_prefix(&Args::global().directory)
-            .ok()?
-            .to_str()?
-    );
-
-    let name = format!(
+    let item = format!(
         "{}{}",
         path.file_name()?.to_str()?,
         match path.is_dir() {
@@ -136,14 +115,11 @@ fn format_path(path: PathBuf) -> Option<(String, String)> {
         }
     );
 
-    Some((name, net_path))
+    Some((item, get_dir_rel(&path).unwrap()))
 }
 
 /// Main exec function for the HTTPDir server module
 pub async fn exec(gargs: GlobalArgs, mode_args: Args) -> io::Result<()> {
-    // globalize module arguments for read use in async functions
-    MODARGS.set(mode_args).unwrap();
-
     let addr = format!("{}:{}", gargs.ip, gargs.port);
     let sock: SocketAddr = match addr.parse() {
         Ok(s) => s,
@@ -152,7 +128,8 @@ pub async fn exec(gargs: GlobalArgs, mode_args: Args) -> io::Result<()> {
         }
     };
 
-    let handle = tokio::spawn(warp::serve(routes()).bind(sock));
+    let serve_dir = mode_args.directory.clone();
+    let handle = tokio::spawn(warp::serve(routes(serve_dir)).bind(sock));
 
     println!(
         "Serving HTTP on {} port {} ({})",
