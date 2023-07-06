@@ -35,6 +35,35 @@ SUBCOMMANDS:
 To serve the /tmp directory over HTTP on port 8080:
 `servar -p 8080 htt-dir /tmp`
 
+## Adding a Module
+Adding a module is very simple. The source tree should look like:
+```
+main.rs
+module_name/
+-> mod.rs
+-> module_name.rs
+```
+
+`mod.rs` shall export the two required things to integrate it. the `Args` struct and the entrypoint `exec` function.
+
+To integrate it into the core tool, only 2 lines of code are required. The first adds an entry to the Modes enum, and the second adds a match for the entry point.
+
+```
+pub enum ServerMode {
+    HTTPDir(httpdir::Args),
+}
+------------------------
+match args.mode {
+    ServerMode::HTTPDir(mod_args) => httpdir::exec(gargs, mod_args).await?,
+}
+```
+
+And that's all there is! As more global arguments are added, these will be exposed to the module, and all the module specific argument handling is done by the module itself.
+
+For an example of this, please see the `httpdir` module.
+
+
+
 ## Results
 Currently, only the HTTP side is supported. Here is a simple benchmark using `wrk` that compares the python module (top results) to the servar (bottom):
 

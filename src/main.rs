@@ -4,6 +4,7 @@ mod httpdir;
 use structopt::StructOpt;
 use tokio::io;
 
+// Add new Server Module Args here
 #[derive(Debug, StructOpt, Clone)]
 #[structopt(about = "server mode")]
 pub enum ServerMode {
